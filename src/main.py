@@ -39,22 +39,19 @@ def process_pdf_in_background(file_path: str):
     try:
         print(f"Starting heavy background RAG ingestion pipeline for: {file_path}")
 
-        # 1. READ/EXTRACT TEXT FROM PDF
         reader = PdfReader(file_path)
         full_text = ""
         for page in reader.pages:
             full_text += page.extract_text() + "\n"
 
-        # 2. CHUNK TEXT (Einfache Trennung bei 1000 Zeichen)
         chunk_size = 1000
         chunks = [full_text[i:i + chunk_size] for i in range(0, len(full_text), chunk_size)]
 
-        print(f"DEBUG: {len(chunks)} Chunks wurden erstellt.")
+        print(f"DEBUG: {len(chunks)} Chunks were created.")
 
-        # 3. GENERATE EMBEDDINGS & SAVE TO QDRANT
         if chunks:
             filename = os.path.basename(file_path)
-            rag_service.db.save_chunks(filename, chunks)
+            rag_service.vector_db.save_chunks(filename, chunks)
         else:
             print("WARNUNG: Kein Text im PDF gefunden!")
 
@@ -68,7 +65,6 @@ def process_pdf_in_background(file_path: str):
 
 @app.post("/webhook/s3")
 async def s3_file_webhook(payload: S3WebhookPayload, background_tasks: BackgroundTasks):
-    # Sicherer Pfad im RAM-Dateisystem von Render
     temp_file_path = f"/tmp/{payload.filename}"
 
     try:
