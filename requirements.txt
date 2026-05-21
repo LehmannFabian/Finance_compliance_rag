@@ -2,7 +2,6 @@ fastapi
 uvicorn[standard]
 pydantic-settings
 qdrant-client
-openai
-pypdf
+google-genai
 pytest
 httpx
