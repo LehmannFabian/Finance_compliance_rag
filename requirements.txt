@@ -7,3 +7,5 @@ pytest
 httpx
 pypdf
 langchain-text-splitters
+python-multipart
+streamlit

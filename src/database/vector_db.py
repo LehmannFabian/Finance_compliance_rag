@@ -2,7 +2,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from google import genai
 from src.config import settings
-
+import time
 
 class VectorDB:
     def __init__(self):
@@ -23,41 +23,65 @@ class VectorDB:
 
         if not exists:
             print(f"Creating vector collection: '{self.collection_name}'...")
-            # Google's text-embedding-004 model generates 768 dimensions.
-            # Cosine similarity is perfect for mapping semantic text matches.
+            # gemini-embedding-001 generates 3,072 dimensions.
             self.client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=models.VectorParams(
-                    size=768,
+                    size=3072,
                     distance=models.Distance.COSINE
                 )
             )
 
     def _get_embedding(self, text: str) -> list[float]:
-        """Converts a snippet of text into a 768-dimensional float vector using Gemini."""
+        """Converts a snippet of text into a 3072-dimensional float vector using Gemini."""
         response = self.gemini_client.models.embed_content(
-            model="text-embedding-004",
+            model="gemini-embedding-001",
             contents=text
         )
-        # Extract the list of floats from the embedding response object
         return response.embeddings[0].values
 
+
     def save_chunks(self, filename: str, chunks: list[str]) -> None:
-        """Converts text chunks into vectors and batch-upserts them into Qdrant with metadata."""
+        """
+        Converts text chunks into vectors and batch-upserts them into Qdrant.
+        Introduces throttling to prevent hitting Gemini API 429 rate limits.
+        """
         points = []
+        total_chunks = len(chunks)
+
+        print(f"Starting vector generation for {total_chunks} chunks...")
 
         for idx, chunk in enumerate(chunks):
-            # 1. Generate the semantic vector
-            vector = self._get_embedding(chunk)
+            retry_attempts = 3
+            vector = None
 
-            # 2. Prepare the payload (metadata) so Gemini can read the text context later
+            for attempt in range(retry_attempts):
+                try:
+                    vector = self._get_embedding(chunk)
+                    break  # Success: break out of the retry loop
+                except Exception as e:
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        # Calculate an increasing backoff wait time (e.g., 2s, 4s, 8s)
+                        wait_time = (attempt + 1) * 2
+                        print(f"Rate limit hit at chunk {idx + 1}/{total_chunks}. Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        # Re-raise any non-rate-limit unexpected exceptions
+                        raise e
+
+            # Guard clause if all retries failed to return a vector
+            if vector is None:
+                print(f"Failed to embed chunk {idx} after multiple attempts due to rate limits.")
+                continue
+
+            # Build the metadata payload for Qdrant storage
             payload = {
                 "source_file": filename,
                 "chunk_index": idx,
                 "text": chunk
             }
 
-            # 3. Create a unique ID for this point using a simple deterministic hash
+            # Use a deterministic hash to prevent duplicate points across runs
             point_id = hash(f"{filename}_{idx}") & 0xFFFFFFFF
 
             points.append(
@@ -68,22 +92,27 @@ class VectorDB:
                 )
             )
 
-        # 4. Batch upload everything into Qdrant
-        self.client.upsert(
-            collection_name=self.collection_name,
-            points=points
-        )
-        print(f"Successfully vectorized and stored {len(points)} chunks from '{filename}' in Qdrant.")
+            # Introduce a short defensive pause between requests.
+            # This keeps our Requests Per Minute safely under the free tier threshold.
+            time.sleep(1.2)
+
+        # Batch upload everything into Qdrant once all vectors are processed
+        if points:
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=points
+            )
+            print(f"Successfully stored {len(points)} chunks from '{filename}' in Qdrant.")
 
     def search_similar_chunks(self, query: str, limit: int = 3) -> list[dict]:
         """Converts a user question into a vector and pulls the top N most relevant chunks."""
         query_vector = self._get_embedding(query)
 
-        search_results = self.client.search(
+        search_results = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit
         )
 
         # Return only the payload dictionary which contains the raw text and source filename
-        return [result.payload for result in search_results]
+        return [point.payload for point in search_results.points if point.payload is not None]
