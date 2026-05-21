@@ -1,6 +1,6 @@
 # Swiss Regulatory Advisor
 
-Swiss Regulatory Advisor is a FastAPI-based RAG application built for a finance compliance portfolio. It ingests regulatory PDF documents, stores their extracted content as vectors in Qdrant, and answers compliance questions with Gemini using only the uploaded document context.
+Swiss Regulatory Advisor is a FastAPI-based RAG application built for a finance compliance. It ingests regulatory PDF documents over AWS, stores their extracted content as vectors in Qdrant, and answers compliance questions with Gemini using only the uploaded document context.
 
 The project also includes a Streamlit frontend for interacting with the system through a simple portfolio-friendly UI.
 
