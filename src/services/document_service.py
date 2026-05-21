@@ -1,24 +1,60 @@
-from pathlib import Path
-
+import io
 from pypdf import PdfReader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
-def extract_pdf_text(path: str | Path) -> str:
-    reader = PdfReader(str(path))
-    return "\n".join(page.extract_text() or "" for page in reader.pages)
+def extract_text_from_pdf(pdf_content: bytes) -> str:
+    """
+    Takes the raw binary bytes of a PDF file and extracts all readable text.
+    """
+    # Wrap the raw bytes in an in-memory file stream
+    pdf_file = io.BytesIO(pdf_content)
+    reader = PdfReader(pdf_file)
+    extracted_text = ""
+
+    # Loop through every page and pull out the characters
+    for page in reader.pages:
+        page_text = page.extract_text()
+        if page_text:
+            extracted_text += page_text + "\n"
+
+    return extracted_text
 
 
-def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150) -> list[str]:
-    if chunk_size <= 0:
-        raise ValueError("chunk_size must be positive")
-    if overlap < 0 or overlap >= chunk_size:
-        raise ValueError("overlap must be non-negative and smaller than chunk_size")
+def chunk_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> list[str]:
+    """
+    Splits a long string of text into smaller, overlapping chunks.
+    The overlap ensures that sentences or context cut off at the boundaries aren't lost.
+    """
+    # RecursiveCharacterTextSplitter is smart: it tries to split by paragraphs (\n\n),
+    # then sentences (\n), then words ( ) to keep structural meaning together.
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        length_function=len,
+        separators=["\n\n", "\n", " ", ""]
+    )
 
-    chunks: list[str] = []
-    start = 0
-    while start < len(text):
-        chunk = text[start : start + chunk_size].strip()
-        if chunk:
-            chunks.append(chunk)
-        start += chunk_size - overlap
-    return chunks
+    return text_splitter.split_text(text)
+
+
+def process_regulatory_document(filename: str, pdf_content: bytes) -> int:
+    """
+    The orchestrator function for document ingestion.
+    Extracts text, splits it into chunks, and prepares it for the database.
+    """
+    print(f"Processing started for file: {filename}")
+
+    # 1. Extract raw text
+    raw_text = extract_text_from_pdf(pdf_content)
+    if not raw_text.strip():
+        raise ValueError("The uploaded PDF does not contain any extractable text (it might be a scanned image).")
+
+    # 2. Break into semantic chunks
+    chunks = chunk_text(raw_text)
+    print(f"Successfully split '{filename}' into {len(chunks)} chunks.")
+
+    # TODO: In the next step, we will pass these chunks to Qdrant Vector DB
+    # vector_db.save_chunks(filename, chunks)
+
+    return len(chunks)

@@ -5,3 +5,5 @@ qdrant-client
 google-genai
 pytest
 httpx
+pypdf
+langchain-text-splitters
