@@ -100,7 +100,8 @@ class VectorDB:
         if points:
             self.client.upsert(
                 collection_name=self.collection_name,
-                points=points
+                points=points,
+                wait=True
             )
             print(f"Successfully stored {len(points)} chunks from '{filename}' in Qdrant.")
 
