@@ -5,6 +5,14 @@ import requests
 # FastAPI backend endpoint configuration
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
+try:
+    health_response = requests.get(f"{BACKEND_URL}/health", timeout=10)
+    if health_response.status_code != 200:
+        st.info("Backend is starting. Please wait a moment and retry.")
+except requests.RequestException:
+    st.info("Backend is starting. Please wait a moment and retry.")
+
+
 st.set_page_config(
     page_title="Swiss Regulatory Advisor",
     page_icon="🇨🇭",
