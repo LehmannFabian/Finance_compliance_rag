@@ -1,6 +1,9 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+import os
+import shutil
+
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
-from src.services.document_service import process_regulatory_document
+
 from src.services.rag_service import RAGService
 from src.config import settings
 
@@ -25,13 +28,6 @@ def health_check():
         "environment": settings.ENV,
         "project": settings.PROJECT_NAME
     }
-
-
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks
-import shutil
-import os
-
-app = FastAPI()
 
 
 # Move your heavy extraction/vector embedding code into a standalone helper function
