@@ -1,8 +1,9 @@
+import os
 import streamlit as st
 import requests
 
 # FastAPI backend endpoint configuration
-BACKEND_URL = "http://localhost:8000"
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 st.set_page_config(
     page_title="Swiss Regulatory Advisor",
